@@ -11,4 +11,6 @@ In 2023 I started at Cloudflare and have been learning a bucket load of new tech
 
 So i've made a few useful projects and gone over a few bumps. I thought I should be documenting some of these such that I can a) remember them myself as I work along and b) share them so others can avoid their own bumpy roads.
 
-This is the first step. I just built out a Docker image designed to run in any containerized enviornment and allow you to use a CLoudflare tunnel to get to a shell and poke around the containerized network. I'll write that all up soon enough.
+This is the first step. I just built out a Docker image designed to run in any containerized enviornment and allow you to use a Cloudflare tunnel to get to a shell and poke around the containerized network. I'll write that all up soon enough...
+
+Just need to get back from Italy!
