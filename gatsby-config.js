@@ -12,7 +12,7 @@ module.exports = {
     title: `Securitypedant Blog`,
     author: {
       name: `Simon Thorpe`,
-      summary: `I work at Cloudflare and have been working in the identity and security space for 25+ years.`,
+      summary: `I work at Cloudflare and have been working in the identity and security space for 25+ years. This blog documents my latest learnings and sharing that with others.`,
     },
     description: `This blog documents my latest learnings and sharing that with others.`,
     siteUrl: `https://securitypedant.com/`,
