@@ -1,0 +1,29 @@
+version: "3.9"
+services:
+    tunnel:
+        image: cloudflare/cloudflared:latest
+        container_name: tunnel
+        restart: always
+        command: tunnel run --token <INSERT YOUR TOKEN HERE>
+
+    bastion-host:
+        image: simonsecuritypedant/bastionhost:latest
+        container_name: bastionhost
+        tty: true
+        restart: always
+        networks:
+            - bastionhost
+        ports:
+            - 22:22
+        volumes:
+            - data:/data
+            - ${PWD}/cloudflare-ca.pub:/etc/ssh/cloudflare-ca.pub
+        environment:
+            - USER=simon
+            - USERPASS=notagoodpassword
+
+volumes:
+    data: {}
+
+networks:
+    bastionhost: {}
