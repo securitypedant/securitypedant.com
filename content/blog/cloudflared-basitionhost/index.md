@@ -4,40 +4,45 @@ date: "2023-07-26T22:40:32.169Z"
 description: How to tunnel into your container infrastructure with Cloudflare
 ---
 
-# A better way to remotely access your container servers and networks
+## A better way to remotely access your container servers and networks
+
 Over the past few months I've been learning Docker and containerization. Starting with single docker images, to compose files, to Docker in swarm mode and finally learning about Kubernetes.
 
-Along the journey I've had to investigate the networking from a containers perspective. I needed test DNS resolution from a container connected to a specific network as well as test things like reading a Swarm managed secret in a container. The simplest way to do this, was to just deploy a blank Ubuntu image, connect to the relavent Docker networks and then attach to the shell.
+Along the journey I've had to investigate the networking from a container perspective. I needed test DNS resolution from a container connected to a specific network as well as test things like reading a Swarm managed secret in a container. The simplest way to do this was to deploy a blank Ubuntu image, connect it to the relevant Docker networks and then attach to the shell.
 
 Also in my work I am often in need of a bastion host. This is a server with an interface exposed to the internet and used to gain access to a variety of resources on a private network. Access to the bastion must be secure so that only authorized users can then jump from the bastion host to other containers via SSH. The typical setup looks something like this...
 
-![Bastion Host Network The Old Way](./bastion-network-orig.jpg)
+![Bastion Host Network The Old Way](./bastion-network-orig.png)
 
-Usually it's a Linux server with a public IP exposing an SSH service. Securing this service depends on how rushed I am or how important the resources behind it are. But usually the setup is SSH authentication with a private key (not password) and limit access to the IP/port using an allow list of IPs. This usually suffices, as most of the environments I build are not critical business systems, rather they are demonstration or test environments.
+Usually it's a Linux server with a public IP exposing an SSH service. Securing this service depends on how rushed I am or how important the resources behind it are. But usually the setup is authentication with a private key (not password) and then limit access to the IP/port using an allow list. This usually suffices, as most of the environments I build are not critical business systems they are demonstration or test environments which are often temporary.
 
-But this approach is a little painful to manage. First, I need to figure out how to securely share the SSH key information with other people on my team that need access. Then I have to manage the allowed IP range. If someone on my team is travelling or working from home, their IP might change quite often, which is a hassle to keep updating.
+But this approach is a little painful to manage. First, I need to figure out how to securely share the SSH key with other people on my team. Then I have to manage the allowed IP ranges. If someone on my team is traveling or working from home, their IP changes often, which is a hassle to keep updating.
 
-# Better bastion hosts with Cloudflare
-There is a much easier way to do this with Cloudflare and the solution I'm about to [describe is free](https://www.cloudflare.com/plans/zero-trust-services/#)! Just sign up for a [Cloudflare account](https://dash.cloudflare.com/sign-up) and get started.
+## Better bastion hosts with Cloudflare
 
-The diagram below shows how this approach is different. Instead of exposing the hosts public IP, instead we create a tunnel from a container inside your existing infrastructure, on a private network, into the Cloudflare network. Then route all requests to that host via Cloudflare.
+There is a much easier way to do this with Cloudflare and the solution I'm about to [describe is free](https://www.cloudflare.com/plans/zero-trust-services/#)! Just sign up for a [Cloudflare account](https://dash.cloudflare.com/sign-up) and follow along.
 
-![Bastion Host Network The Cloudflare Way](./bastion-network-cf.jpg)
+The diagram below shows how this approach is different. Instead of exposing the hosts public IP, instead we create a tunnel from a container inside your existing infrastructure, on a private network, into the Cloudflare network. This container, and the tunnel, is then used to access the bastion host from where we can then do network analysis and also SSH into other containers.
 
-From there we use Cloudflare's security services to protect access to the bastion host. This improves over the above solution in the following ways.
+![Bastion Host Network The Cloudflare Way](./bastion-network-cf.png)
+
+Once connected, we use Cloudflare's security services to protect access to the bastion host. This improves over the above solution in the following ways.
+
 - No hosts/servers/containers are directly exposed to the internet.
-- Access to the bastion host can now be defined by a tight security policy (an example of this later)
-    - And the policies can be different based on the identity, location, devices of the user.
+- Access to the bastion host can now be defined by a tight but flexible security policies (an example of this later)
 - All traffic from client to server is fully secured when you use Cloudflare WARP.
 - The SSH service can be rendered in a browser, making access easier as well as secure.
 
 Let's take a look at the specifics...
 
-# Architecture
+## Architecture
 
-First step is to deploy a bastion host into your environment. There are many ways to do this, but due to the amount of times I setup test environments across providers such as Google, Azure and AWS, I wanted a quick and easy way to do it. So I built a simple [Docker image](https://hub.docker.com/) and the source is available on [github.com](https://github.com/securitypedant/).
+So before we start configuring things, let's take a look at the overall architecture in a bit more detail.
 
-This image is a base Ubuntu server with the following setup.
+First, the tunnel container. This is provided by Cloudflare and contains the cloudflared connector. This sits into your container networks and instantiates outbound connections to the Cloudflare network. Then requests to a public hostname are routed through the Cloudflare network, where security policy is applied, and then down to the cloudflared connector which proxies the SSH traffic to the bastion host.
+
+For the bastion host itself, I've built a simple [Docker image](https://hub.docker.com/) and the source is available on [github.com](https://github.com/securitypedant/). You can of course just use your own image, but for the purpose of this article, I'm going to use mine. It contains;
+
 - A few basic networking tools such as ping, traceroute, dig etc.
 - SSH config for easy Cloudflare remote access (explained later in this article)
 - A user account in the sudo group with a default password set
@@ -54,7 +59,7 @@ You could, if you wanted, simply use the Cloudflare tunnel software to manage SS
 
 Before we talk about deploying the containers, we need to jump into Cloudflare and do a little pre-setup.
 
-# Creating a Cloudflare tunnel and defining the access policy
+## Creating a Cloudflare tunnel and defining the access policy
 
 Assuming you have just signed up for Cloudflare, I will walk through the entire config. It's possible to create the tunnel and setup the access policy before building the containers.
 
@@ -64,7 +69,7 @@ To access the bastion host, we are going to use a public hostname, i.e. bastion-
 - Add/move your DNS domain into Cloudflare.
 - Point an existing DNS record to a Cloudflare service.
 
-Hosting your DNS on Cloudflare is free, obviously you have to shell out for the registration but their DNS is excellent and worth using. When your DNS is hosted on Cloudflare, the required record is automatically created during tunnel setup. However, if you can't (or just don't want to) move your DNS, you will need to create a CNAME record which points to the tunnel. 
+Hosting your DNS on Cloudflare is free, obviously you have to shell out for the registration but their DNS is excellent and worth using. When your DNS is hosted on Cloudflare, the required record is automatically created during tunnel setup. However, if you can't (or just don't want to) move your DNS, you will need to create a CNAME record which points to the tunnel.
 
 2. Create the tunnel
 Now that you have DNS setup, let's create a tunnel. Login to the Cloudflare [Zero Trust dashboard](https://one.dash.cloudflare.com/) and click on the Access menu item and tunnels. Then hit "Create Tunnel"
@@ -81,10 +86,9 @@ Now we need to create a public hostname in the tunnel. This is the address that 
 
 3. Configure the access policy
 
+## Deploy the host as a container and tunneling to Cloudflare
 
-# Deploy the host as a container and tunneling to Cloudflare
-
-Now that we have Cloudflare setup, we need to actually deploy the containers. To explain this I'll use a Docker compose file. 
+Now that we have Cloudflare setup, we need to actually deploy the containers. To explain this I'll use a Docker compose file.
 
     version: "3.9"
     services:
@@ -153,9 +157,10 @@ You'll also notice I create a persisant volume called **/data**. I use this if I
 
 Finally, note that we are publishing port 22 from the bastion host. This is so the cloudflared container can connect to the SSH service on the bastion host.
 
-# Configuring access to the tunneled bastion host
+## Configuring access to the tunneled bastion host
+
 Alright, nearly done. Now we should have two new containers running your infrastructure. If you correctly configured the cloudflared container, you will be able to see the tunnel connected in the Cloudflared dashboard.
 
-** ADD SCREENSHOT OF DASHBOARD**
+**ADD SCREENSHOT OF DASHBOARD**
 
 Now we need to a) create an Access app to control who can conec
